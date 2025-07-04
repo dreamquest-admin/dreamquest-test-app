@@ -28,24 +28,38 @@ jobs:
         tags: |
           ${{ secrets.DOCKERHUB_USERNAME }}/dreamquest-test-app:latest
           ${{ secrets.DOCKERHUB_USERNAME }}/dreamquest-test-app:${{ github.sha }}
-    - name: Install jq
+          
+    - name: Install dependencies
       run: sudo apt-get update && sudo apt-get install -y jq
-    - name: Deploy to Portainer via API
+      
+    - name: Deploy to Portainer
       run: |
+        # Encode compose file
+        COMPOSE_CONTENT=$(cat docker-compose.prod.yml | jq -Rs . | sed 's/^"//;s/"$//')
+        
+        # Prepare environment variables
+        ENV_JSON=$(jq -n \
+          --arg tag "${{ github.sha }}" \
+          --arg db_name "${{ secrets.DB_NAME }}" \
+          --arg db_user "${{ secrets.DB_USER }}" \
+          --arg db_pass "${{ secrets.DB_PASSWORD }}" \
+          '[
+            {"name": "TAG", "value": $tag},
+            {"name": "DB_NAME", "value": $db_name},
+            {"name": "DB_USER", "value": $db_user},
+            {"name": "DB_PASSWORD", "value": $db_pass}
+          ]')
+        
         # Create/update stack
-        curl -X POST "${{ secrets.PORTAINER_URL }}/api/stacks?method=repository&type=2&endpointId=${{ secrets.PORTAINER_ENDPOINT_ID }}" \
+        RESPONSE=$(curl -s -X POST "${{ secrets.PORTAINER_URL }}/api/stacks?method=repository&type=2&endpointId=${{ secrets.PORTAINER_ENDPOINT_ID }}" \
           -H "X-API-Key: ${{ secrets.PORTAINER_API_KEY }}" \
           -H "Content-Type: application/json" \
           -d '{
             "name": "dreamquest-test",
-            "stackFileContent": "$(cat docker-compose.prod.yml | jq -Rs . | cut -c 2- | rev | cut -c 2- | rev)",
-            "env": [
-              {"name": "TAG", "value": "${{ github.sha }}"},
-              {"name": "DB_HOST", "value": "postgres"},
-              {"name": "DB_NAME", "value": "${{ secrets.DB_NAME }}"},
-              {"name": "DB_USER", "value": "${{ secrets.DB_USER }}"},
-              {"name": "DB_PASSWORD", "value": "${{ secrets.DB_PASSWORD }}"}
-            ],
+            "stackFileContent": "'"$COMPOSE_CONTENT"'",
+            "env": '"$ENV_JSON"',
             "prune": true,
             "pullImage": true
-          }'
+          }')
+        
+        echo "Deployment response: $RESPONSE"
