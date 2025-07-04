@@ -14,6 +14,7 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
       
+    # Docker Hub Authentication
     - name: Log in to Docker Hub
       uses: docker/login-action@v3
       with:
@@ -35,31 +36,28 @@ jobs:
     - name: Deploy to Portainer
       run: |
         # Encode compose file
-        COMPOSE_CONTENT=$(cat docker-compose.prod.yml | jq -Rs . | sed 's/^"//;s/"$//')
+        COMPOSE_CONTENT=$(jq -Rs . < docker-compose.prod.yml | cut -c 2- | rev | cut -c 2- | rev)
         
-        # Prepare environment variables
-        ENV_JSON=$(jq -n \
-          --arg tag "${{ github.sha }}" \
-          --arg db_name "${{ secrets.DB_NAME }}" \
-          --arg db_user "${{ secrets.DB_USER }}" \
-          --arg db_pass "${{ secrets.DB_PASSWORD }}" \
-          '[
-            {"name": "TAG", "value": $tag},
-            {"name": "DB_NAME", "value": $db_name},
-            {"name": "DB_USER", "value": $db_user},
-            {"name": "DB_PASSWORD", "value": $db_pass}
-          ]')
+        # Prepare payload
+        PAYLOAD=$(cat <<EOF
+        {
+          "name": "dreamquest-test",
+          "stackFileContent": "$COMPOSE_CONTENT",
+          "env": [
+            {"name": "TAG", "value": "${{ github.sha }}"},
+            {"name": "DB_HOST", "value": "postgres"},
+            {"name": "DB_NAME", "value": "${{ secrets.DB_NAME }}"},
+            {"name": "DB_USER", "value": "${{ secrets.DB_USER }}"},
+            {"name": "DB_PASSWORD", "value": "${{ secrets.DB_PASSWORD }}"}
+          ],
+          "prune": true,
+          "pullImage": true
+        }
+        EOF
+        )
         
         # Create/update stack
-        RESPONSE=$(curl -s -X POST "${{ secrets.PORTAINER_URL }}/api/stacks?method=repository&type=2&endpointId=${{ secrets.PORTAINER_ENDPOINT_ID }}" \
+        curl -X POST "${{ secrets.PORTAINER_URL }}/api/stacks?method=repository&type=2&endpointId=${{ secrets.PORTAINER_ENDPOINT_ID }}" \
           -H "X-API-Key: ${{ secrets.PORTAINER_API_KEY }}" \
           -H "Content-Type: application/json" \
-          -d '{
-            "name": "dreamquest-test",
-            "stackFileContent": "'"$COMPOSE_CONTENT"'",
-            "env": '"$ENV_JSON"',
-            "prune": true,
-            "pullImage": true
-          }')
-        
-        echo "Deployment response: $RESPONSE"
+          -d "$PAYLOAD"
