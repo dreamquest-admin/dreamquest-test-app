@@ -42,5 +42,11 @@ networks:
 
 volumes:
   pgdata:
+    external: true
+    name: dreamquest-pgdata
   app-logs:
+    external: true
+    name: dreamquest-app-logs
   postgres-logs:
+    external: true
+    name: dreamquest-postgres-logs
