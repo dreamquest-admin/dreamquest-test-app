@@ -44,7 +44,16 @@ jobs:
           
     - name: Install dependencies
       run: sudo apt-get update && sudo apt-get install -y jq
-      
+    - name: Get Cloudflare Access Token
+      run: |
+        RESPONSE=$(curl -s -X POST "https://portainer.dreamquest.vip/cdn-cgi/access/service-token" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "client_id": "${{ secrets.CLOUDFLARE_CLIENT_ID }}",
+            "client_secret": "${{ secrets.CLOUDFLARE_CLIENT_SECRET }}"
+          }')
+        TOKEN=$(echo $RESPONSE | jq -r '.access_token')
+        echo "CLOUDFLARE_TOKEN=$TOKEN" >> $GITHUB_ENV
     - name: Deploy to Portainer
       run: |
         # Read and escape compose file
