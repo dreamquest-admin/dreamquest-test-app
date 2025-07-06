@@ -16,20 +16,20 @@ jobs:
       
     - name: Docker Hub Login
       run: |
-        echo "Username length: ${#DOCKERHUB_USERNAME}"
-        echo "Token length: ${#DOCKERHUB_TOKEN}"
-        echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" docker.io --password-stdin
+        echo "Username length: ${{secrets.DOCKERHUB_USERNAME}}"
+        echo "Token length: ${{secrets.DOCKERHUB_TOKEN})"
+        echo "${{secrets.DOCKERHUB_TOKEN}}" | docker login -u "${{secrets.DOCKERHUB_USERNAME}}" docker.io --password-stdin
       env:
-        DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-        DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        DOCKERHUB_USERNAME: ${{secrets.DOCKERHUB_USERNAME}}
+        DOCKERHUB_TOKEN: ${{secrets.DOCKERHUB_TOKEN}}
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
       with:
         context: .
         push: true
         tags: |
-          ${{ secrets.DOCKERHUB_USERNAME }}/dreamquest-test-app:latest
-          ${{ secrets.DOCKERHUB_USERNAME }}/dreamquest-test-app:${{ github.sha }}
+          ${{secrets.DOCKERHUB_USERNAME}}/dreamquest-test-app:latest
+          ${{secrets.DOCKERHUB_USERNAME}}/dreamquest-test-app:${{ github.sha }}
           
     - name: Install dependencies
       run: sudo apt-get update && sudo apt-get install -y jq
