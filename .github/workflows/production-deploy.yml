@@ -8,6 +8,19 @@ jobs:
   build-push-deploy:
     runs-on: ubuntu-22.04
     steps:
+    - name: Verify secrets exist
+      run: |
+        echo "Checking Docker Hub credentials..."
+        if [ -z "${{ secrets.DOCKERHUB_USERNAME }}" ]; then
+          echo "::error::DOCKERHUB_USERNAME is empty!"
+          exit 1
+        fi
+        if [ -z "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
+          echo "::error::DOCKERHUB_TOKEN is empty!"
+          exit 1
+        fi
+        echo "Credentials verified successfully"
+        
     - name: Checkout code
       uses: actions/checkout@v4
       
@@ -16,20 +29,17 @@ jobs:
       
     - name: Docker Hub Login
       run: |
-        echo "Username length: ${{secrets.DOCKERHUB_USERNAME}}"
-        echo "Token length: ${{secrets.DOCKERHUB_TOKEN})"
-        echo "${{secrets.DOCKERHUB_TOKEN}}" | docker login -u "${{secrets.DOCKERHUB_USERNAME}}" docker.io --password-stdin
-      env:
-        DOCKERHUB_USERNAME: ${{secrets.DOCKERHUB_USERNAME}}
-        DOCKERHUB_TOKEN: ${{secrets.DOCKERHUB_TOKEN}}
+        echo "Logging into Docker Hub..."
+        docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" -p "${{ secrets.DOCKERHUB_TOKEN }}" docker.io
+        
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
       with:
         context: .
         push: true
         tags: |
-          ${{secrets.DOCKERHUB_USERNAME}}/dreamquest-test-app:latest
-          ${{secrets.DOCKERHUB_USERNAME}}/dreamquest-test-app:${{ github.sha }}
+          dreamquest/dreamquest-test-app:latest
+          dreamquest/dreamquest-test-app:${{ github.sha }}
           
     - name: Install dependencies
       run: sudo apt-get update && sudo apt-get install -y jq
