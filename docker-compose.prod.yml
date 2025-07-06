@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   app:
-    image: ${DOCKERHUB_USERNAME}/dreamquest-test-app:${TAG:-latest}
+    image: ${GITHUB_USERNAME}/dreamquest-test-app:${TAG:-latest}
     container_name: dreamquest-test-app
     environment:
       - DB_HOST=${DB_HOST}
