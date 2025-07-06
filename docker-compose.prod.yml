@@ -38,7 +38,6 @@ services:
 
 networks:
   app-network: dq-app-network
-    driver: bridge
 
 volumes:
   pgdata:
