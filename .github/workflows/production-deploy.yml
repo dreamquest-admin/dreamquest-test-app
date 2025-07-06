@@ -88,3 +88,6 @@ jobs:
           -H "X-API-Key: ${{ secrets.PORTAINER_API_KEY }}" \
           -H "Content-Type: application/json" \
           -d "$PAYLOAD"
+        RESPONSE=$(curl -X POST ...)  # Capture response
+        echo "Portainer response: $RESPONSE"
+        echo $RESPONSE | jq .  # Pretty print JSON response
