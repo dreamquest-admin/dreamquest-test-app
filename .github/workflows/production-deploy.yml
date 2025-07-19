@@ -9,19 +9,6 @@ jobs:
     runs-on: ubuntu-22.04
     environment: dq-nas
     steps:
-    - name: Verify secrets exist
-      run: |
-        echo "Checking Docker Hub credentials..."
-        if [ -z "${{ secrets.DOCKERHUB_USERNAME }}" ]; then
-          echo "::error::DOCKERHUB_USERNAME is empty!"
-          exit 1
-        fi
-        if [ -z "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
-          echo "::error::DOCKERHUB_TOKEN is empty!"
-          exit 1
-        fi
-        echo "Credentials verified successfully"
-        
     - name: Checkout code
       uses: actions/checkout@v4
       
@@ -30,7 +17,6 @@ jobs:
       
     - name: Docker Hub Login
       run: |
-        echo "Logging into Docker Hub..."
         docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" -p "${{ secrets.DOCKERHUB_TOKEN }}" docker.io
         
     - name: Build and push Docker image
@@ -42,72 +28,41 @@ jobs:
           dreamquest/dreamquest-test-app:latest
           dreamquest/dreamquest-test-app:${{ github.sha }}
           
-    - name: Install dependencies
-      run: sudo apt-get update && sudo apt-get install -y jq curl
-
-    - name: Verify Portainer connection
-      run: |
-        echo "Testing Portainer URL: ${{ secrets.PORTAINER_URL }}"
-        curl -I --max-time 10 "${{ secrets.PORTAINER_URL }}/api/endpoints"
-        echo "Testing endpoint: ${{ secrets.PORTAINER_ENDPOINT_ID }}"
-        curl -I --max-time 10 "${{ secrets.PORTAINER_URL }}/api/endpoints/${{ secrets.PORTAINER_ENDPOINT_ID }}/docker/version"
-    - name: Get Cloudflare Access Token
-      id: cloudflare-token
-      run: |
-        RESPONSE=$(curl -s -X POST "https://dreamquest.cloudflareaccess.com/cdn-cgi/access/service-token" \
-          -H "Content-Type: application/json" \
-          -d '{
-            "client_id": "${{ secrets.CLOUDFLARE_CLIENT_ID }}",
-            "client_secret": "${{ secrets.CLOUDFLARE_CLIENT_SECRET }}"
-          }')
-        # Debug output (masked by GitHub)
-        echo "Response received: ${RESPONSE:0:100}..."
-        TOKEN=$(echo $RESPONSE | jq -r '.access_token')
-        echo "CLOUDFLARE_TOKEN=$TOKEN" >> $GITHUB_ENV
-    - name: Deploy to Portainer
-      run: |
-        # Read and escape compose file
-        COMPOSE_CONTENT=$(jq -Rs . < docker-compose.prod.yml)
-        
-        # Create payload with proper JSON escaping
-        PAYLOAD=$(jq -n \
-          --arg name "dreamquest-test-${{ github.sha }}" \
-          --arg stackFileContent "$COMPOSE_CONTENT" \
-          --arg tag "${{ github.sha }}" \
-          --arg db_name "${{ secrets.DB_NAME }}" \
-          --arg db_user "${{ secrets.DB_USER }}" \
-          --arg db_password "${{ secrets.DB_PASSWORD }}" \
-          '{
-            "name": $name,
-            "stackFileContent": $stackFileContent,
-            "env": [
-              {"name": "TAG", "value": $tag},
-              {"name": "DB_HOST", "value": "postgres"},
-              {"name": "DB_NAME", "value": $db_name},
-              {"name": "DB_USER", "value": $db_user},
-              {"name": "DB_PASSWORD", "value": $db_password}
-            ],
-            "prune": true,
-            "pullImage": true
-          }')
-        
-        # Create/update stack in portainer
-        RESPONSE=$(curl -v -X POST "${{ secrets.PORTAINER_URL }}/api/stacks?method=repository&type=2&endpointId=${{ secrets.PORTAINER_ENDPOINT_ID }}" \
-          -H "Authorization: Bearer ${{ env.CLOUDFLARE_TOKEN }}" \
-          -H "X-API-Key: ${{ secrets.PORTAINER_API_KEY }}" \
-          -H "Content-Type: application/json" \
-          -d "$PAYLOAD")
-        
-        echo "Full curl output:"
-        echo "$RESPONSE"
-        
-        # Extract HTTP status
-        HTTP_STATUS=$(echo "$RESPONSE" | grep -oP 'HTTP/\d\.\d \K\d+')
-        echo "HTTP status: $HTTP_STATUS"
-        
-        if [ "$HTTP_STATUS" -ne 200 ]; then
-          echo "::error::Portainer API call failed with status $HTTP_STATUS"
-          exit 1
-        fi
-        
-        echo "Stack deployment successful!"
+    - name: Deploy via SSH
+      uses: appleboy/ssh-action@v1.1.0
+      with:
+        host: ${{ secrets.NAS_IP }}
+        username: ${{ secrets.NAS_USER }}
+        key: ${{ secrets.NAS_SSH_KEY }}
+        script: |
+          # Create directory structure
+          sudo mkdir -p /volume1/docker/dreamquest-test-app
+          cd /volume1/docker/dreamquest-test-app
+          
+          # Write compose file
+          cat << 'EOF' > docker-compose.prod.yml
+          version: '3.8'
+          services:
+            app:
+              image: dreamquest/dreamquest-test-app:${{ github.sha }}
+              environment:
+                - DB_HOST=postgres
+                - DB_NAME=${{ secrets.DB_NAME }}
+                - DB_USER=${{ secrets.DB_USER }}
+                - DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+              ports:
+                - "8000:8000"
+              depends_on:
+                - postgres
+                
+            postgres:
+              image: postgres:15
+              environment:
+                - POSTGRES_DB=${{ secrets.DB_NAME }}
+                - POSTGRES_USER=${{ secrets.DB_USER }}
+                - POSTGRES_PASSWORD=${{ secrets.DB_PASSWORD }}
+              volumes:
+                - postgres_data:/var/lib/postgresql/data
+                
+          volumes:
+            postgres_data: /volume1/docker/postgresql/data
