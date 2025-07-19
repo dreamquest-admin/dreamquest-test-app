@@ -43,7 +43,14 @@ jobs:
           dreamquest/dreamquest-test-app:${{ github.sha }}
           
     - name: Install dependencies
-      run: sudo apt-get update && sudo apt-get install -y jq
+      run: sudo apt-get update && sudo apt-get install -y jq curl
+
+    - name: Verify Portainer connection
+      run: |
+        echo "Testing Portainer URL: ${{ secrets.PORTAINER_URL }}"
+        curl -I --max-time 10 "${{ secrets.PORTAINER_URL }}/api/endpoints"
+        echo "Testing endpoint: ${{ secrets.PORTAINER_ENDPOINT_ID }}"
+        curl -I --max-time 10 "${{ secrets.PORTAINER_URL }}/api/endpoints/${{ secrets.PORTAINER_ENDPOINT_ID }}/docker/version"
     - name: Get Cloudflare Access Token
       run: |
         RESPONSE=$(curl -s -X POST "https://dreamquest.cloudflareaccess.com/cdn-cgi/access/service-token" \
@@ -63,7 +70,7 @@ jobs:
         
         # Create payload with proper JSON escaping
         PAYLOAD=$(jq -n \
-          --arg name "dreamquest-test" \
+          --arg name "dreamquest-test-${{ github.sha }}" \
           --arg stackFileContent "$COMPOSE_CONTENT" \
           --arg tag "${{ github.sha }}" \
           --arg db_name "${{ secrets.DB_NAME }}" \
@@ -84,10 +91,21 @@ jobs:
           }')
         
         # Create/update stack
-        curl -X POST "${{ secrets.PORTAINER_URL }}/api/stacks?method=repository&type=2&endpointId=${{ secrets.PORTAINER_ENDPOINT_ID }}" \
+        RESPONSE=$(curl -v -X POST "${{ secrets.PORTAINER_URL }}/api/stacks?method=repository&type=2&endpointId=${{ secrets.PORTAINER_ENDPOINT_ID }}" \
           -H "X-API-Key: ${{ secrets.PORTAINER_API_KEY }}" \
           -H "Content-Type: application/json" \
-          -d "$PAYLOAD"
-        RESPONSE=$(curl -X POST ...)  # Capture response
-        echo "Portainer response: $RESPONSE"
-        echo $RESPONSE | jq .  # Pretty print JSON response
+          -d "$PAYLOAD" 2>&1)
+        
+        echo "Full curl output:"
+        echo "$RESPONSE"
+        
+        # Extract HTTP status
+        HTTP_STATUS=$(echo "$RESPONSE" | grep -oP 'HTTP/\d\.\d \K\d+')
+        echo "HTTP status: $HTTP_STATUS"
+        
+        if [ "$HTTP_STATUS" -ne 200 ]; then
+          echo "::error::Portainer API call failed with status $HTTP_STATUS"
+          exit 1
+        fi
+        
+        echo "Stack deployment successful!"
