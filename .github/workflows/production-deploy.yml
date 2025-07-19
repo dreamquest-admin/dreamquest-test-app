@@ -35,9 +35,10 @@ jobs:
         username: ${{ secrets.NAS_USER }}
         key: ${{ secrets.NAS_SSH_KEY }}
         script: |
-          # Create directory structure
-          sudo mkdir -p /volume1/docker/dreamquest-test-app
-          cd /volume1/docker/dreamquest-test-app
+          # UGREEN-specific paths
+          APP_DIR="/volume1/docker/dreamquest-test-app"
+          sudo mkdir -p $APP_DIR
+          cd $APP_DIR
           
           # Write compose file
           cat << 'EOF' > docker-compose.prod.yml
@@ -62,7 +63,4 @@ jobs:
                 - POSTGRES_USER=${{ secrets.DB_USER }}
                 - POSTGRES_PASSWORD=${{ secrets.DB_PASSWORD }}
               volumes:
-                - postgres_data:/var/lib/postgresql/data
-                
-          volumes:
-            postgres_data: /volume1/docker/postgresql/data
+                - $APP_DIR/postgres_data:/var/lib/postgresql/data
