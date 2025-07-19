@@ -92,6 +92,8 @@ jobs:
         
         # Create/update stack
         RESPONSE=$(curl -v -X POST "${{ secrets.PORTAINER_URL }}/api/stacks?method=repository&type=2&endpointId=${{ secrets.PORTAINER_ENDPOINT_ID }}" \
+          -H "Host: portainer.dreamquest.vip" \
+          -H "X-Forwarded-Proto: https" \
           -H "X-API-Key: ${{ secrets.PORTAINER_API_KEY }}" \
           -H "Content-Type: application/json" \
           -d "$PAYLOAD" 2>&1)
